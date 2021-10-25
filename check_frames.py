@@ -38,6 +38,18 @@ ax.hist(t_diffs)
 
 t_diffs.describe()
 
+
+
+#%%
+
+frames_dir = os.path.join(src_dir, 'frames')
+frames = sorted(glob.glob(os.path.join(frames_dir, '*.png')), key=futils.natsort)
+print("Found %i frames" % len(frames))
+
+for f in frames[0:20]:
+    print(f)
+
+
 # %%
 import cv2
 from PIL import Image
