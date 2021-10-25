@@ -29,10 +29,21 @@ from pydc1394.camera2 import Context
 from PIL import Image
 
 #%%
+global first_write
+first_write = 0
+def flushBuffer():
+    #Flush out serial buffer
+    global ser
+    tmp=0
+    while tmp is not '':
+        tmp=ser.read()
 
-def save_camera_info(cam0, caminfo_fpath):
+
+#%%
+
+def save_camera_info(cam, caminfo_fpath):
     '''Save camera settings to file'''
-    mode_dict = object_fields_dict(cam0.mode)
+    mode_dict = object_fields_dict(cam.mode)
     mode_dict.pop('setup')
     with open(caminfo_fpath, 'w') as f:
         json.dump(mode_dict, f, indent=4) 
@@ -56,11 +67,14 @@ def object_fields_dict(cam_mode):
 
 parser = optparse.OptionParser()
 parser.add_option('--output-path', action="store", dest="base_dir", default="/tmp/frames", help="out path directory [default: /tmp/frames]")
-parser.add_option('--experiment_name', action="store", dest="experiment_name", default="test", help="experiment_name of output file [default: test")
+parser.add_option('-E', '--experiment_name', action="store", dest="experiment_name", default="test", help="experiment_name of output file [default: test")
 parser.add_option('--output-format', action="store", dest="output_format", type="choice", choices=['png', 'npz'], default='png', help="out file format, png or npz [default: png]")
 parser.add_option('--write-process', action="store_true", dest="save_in_separate_process", default=True, help="spawn process for disk-writer [default: True]")
 parser.add_option('--write-thread', action="store_false", dest="save_in_separate_process", help="spawn threads for disk-writer")
-parser.add_option('--frame-rate', action="store", dest="frame_rate", help="requested frame rate", type="float", default=40.0)
+
+parser.add_option('-f', '--frame-rate', action="store", dest="frame_rate", help="requested frame rate", type="float", default=40.0)
+parser.add_option('--dur', action="store", dest="recording_duration", help="Recording duration (default: 10min)", type="float", default=10.0)
+
 parser.add_option('--trigger', action="store_true", dest="send_trigger", help="send trigger out to arduino", default=False)
 
 (options, args) = parser.parse_args()
@@ -74,9 +88,11 @@ output_format = options.output_format
 experiment_name = options.experiment_name
 
 save_in_separate_process = options.save_in_separate_process
+recording_duration = float(options.recording_duration)
+send_trigger = options.send_trigger
 frame_rate = options.frame_rate
-frame_period = float(1/frame_rate)
 
+frame_period = float(1/frame_rate)
 save_as_png = False
 save_as_npz = False
 if output_format == 'png':
@@ -85,17 +101,39 @@ elif output_format == 'npz':
     save_as_npz = True
 
 #%% tmp vars
-experiment_name = 'test'
+#experiment_name = 'test'
 base_dir = '/Users/julianarhee/Documents/ruta_lab/projects/free_behavior/acquisition'
-frame_rate=40.
+#frame_rate=40.
+#frame_period = float(1/frame_rate)
+#save_as_png = True
+#save_in_separate_process = True
+#
+#acquire_images = True
+#save_images = True
+#send_trigger = True
+#
 
-frame_period = float(1/frame_rate)
-save_as_png = True
-save_in_separate_process = True
+print("Recording %.2f min. session @ %.2fHz" % (recording_duration, frame_rate))
 
-acquire_images = True
-save_images = True
-send_trigger = False
+time.sleep(2)
+
+
+#%%
+#set up serial connection
+
+if send_trigger:
+    port = "/dev/cu.usbmodem145201"
+    baudrate = 115200
+
+    print("# Please specify a port and a baudrate")
+    print("# using hard coded defaults " + port + " " + str(baudrate))
+    ser = serial.Serial(port, baudrate, timeout=0.5)
+    time.sleep(1)
+
+    #flushBuffer()
+    sys.stdout.flush()
+
+    print("Connected serial port...")
 
 #%% Make the output paths if it doesn't already exist
 try:
@@ -137,18 +175,23 @@ performance_fpath = os.path.join(dst_dir, 'performance.txt')
 #samp_rate = 10 #in hertz
 #record_time = 60*2 #in seconds
 
-if send_trigger:
+#if send_trigger:
     #saves starting temp and humidity
-    arduino = serial.Serial('/dev/cu.usbmodem14301', 9600)
+    #arduino = serial.Serial('/dev/cu.usbmodem14301', 9600)
+    #arduino =  serial.Serial('/dev/cu.AUKEYEP-T21P-serialport', 9600)
+
     #opto_vec=np.zeros([np.int32(record_time*samp_rate)])
     #print('Established serial connection to Arduino')
+
+    #ser.write('S')#start arduino trigger
+    #print('Triggered arduino....')
 
 
 #%%
 # -------------------------------------------------------------
 # Camera Setup
 # -------------------------------------------------------------
-cam0 = None
+cam = None
 if acquire_images:
     print('Searching for camera...')
     # try PvAPI
@@ -159,27 +202,27 @@ if acquire_images:
     context0 = Context()
     n = 0
     # Let it have a few tries in case the camera is waking up
-    while cam0 is None and n < pvapi_retries:
+    while cam is None and n < pvapi_retries:
         try:
             cameras = context0.cameras
             print("Camera IDs:\n", [int(str(cam_id[0]), 16) for cam_id in cameras])
             if len(cameras)>0:
                 print("Opening camera!")
-                cam0 = Camera() #Camera()
+                cam = Camera() #Camera()
             n += 1
             print('\rsearching...')
             time.sleep(0.5)
         except Exception as e:
             # print("%s" % e)
-            cam0 = None
-print("Bound to PvAPI camera (name: %s, uid: %s)" % (cam0.model, cam0.guid))
+            cam = None
+print("Bound to PvAPI camera (name: %s, uid: %s)" % (cam.model, cam.guid))
 
 #%% TODO:  set these values manually
 #those can be automated, the other are manual
 try:
-    cam0.brightness.mode = 'auto'
-    cam0.exposure.mode = 'auto'
-    cam0.white_balance.mode = 'auto'
+    cam.brightness.mode = 'auto' 
+    cam.exposure.mode = 'manual' #'auto' # 2.414 @ 40Hz 
+    cam.white_balance.mode = 'auto'
 except AttributeError: # thrown if the camera misses one of the features
     pass
 
@@ -187,10 +230,7 @@ except AttributeError: # thrown if the camera misses one of the features
 # Choose Format_7 mode
 # See:  ./pydc1394/dc1394.py -- video_mode_vals
 
-print(cam0.modes)
-mode_num = 0
-cam0.mode = cam0.modes[mode_num] # this is what Nathan uses
-# mode_dict = object_fields_dict(cam0.modes[mode_num])
+# mode_dict = object_fields_dict(cam.modes[mode_num])
 # mode_dict
 # mode_dict0:
 # mode_id:  88
@@ -218,20 +258,30 @@ cam0.mode = cam0.modes[mode_num] # this is what Nathan uses
 
 
 #%%
-#Change position to 0,0 (we don't want any offset)
-image_pos = (0, 0)
-cam0.mode.image_position = image_pos
 
-#To change resolution of acquisition
-image_size = (960, 776) #(1080,1080)
-cam0.mode.image_size = image_size
+def set_camera_default(cam, mode='10mm_x_1chamber'):
+    mode_num = 0
+    cam.mode = cam.modes[mode_num] # this is what Nathan uses
 
-#for feat in cam0.features:
-#    print("%s (cam0): %s" % (feat,cam0.__getattribute__(feat).value))
+    #Change position to 0,0 (we don't want any offset)
+    image_pos=(0,0) #TODO fix this
+
+    #To change resolution of acquisition
+    image_size = (960, 776) #(1080,1080)
+    cam.mode.image_size = image_size
+
+    image_pos = (560, 388) # center ROI # (0, 0)
+    cam.mode.image_position = image_pos
+
+    return cam 
+
+cam = set_camera_default(cam, mode='10mm_x_1chamber')
+#for feat in cam.features:
+#    print("%s (cam): %s" % (feat,cam.__getattribute__(feat).value))
 
 #%%
 caminfo_fpath = os.path.join(dst_dir, 'caminfo.json')
-save_camera_info(cam0, caminfo_fpath)
+save_camera_info(cam, caminfo_fpath)
 
 #%%
 # -------------------------------------------------------------
@@ -279,27 +329,37 @@ if save_images:
     disk_writer.daemon = True
     disk_writer.start()
 
+
+#%%
 nframes = 0
 frame_accumulator = 0
 t = 0
 last_t = None
 
-report_period = 20 # frames
+report_period = 10*frame_rate # frames
 
 #Capture images and save them
-record_time = 2. # in sec.
+#record_time = 2. # in sec.
+record_time = recording_duration*60. 
 samp_rate = 1./frame_rate
 time_vec=np.zeros([np.int32(record_time/samp_rate)])
+
 
 if acquire_images:
     #OPEN STREAM
     #camera.capture_start()
     #camera.queue_frame()
-    cam0.start_capture()
-    cam0.flush()
-    cam0.start_video()
-    #cam0.start_one_shot()
+    cam.start_capture()
+    cam.flush()
+    cam.start_video()
+    #cam.start_one_shot()
     #orig_time = time.time()
+
+if send_trigger:
+    #byte_string = str.encode('S')
+    ser.write(str.encode('S')) #('S')#start arduino trigger
+    print('Triggered arduino....')
+
 
 #WAIT FOR ACQUISITION START TRIGGER
 #print('Waiting for trigger to begin acquisition...')
@@ -321,12 +381,11 @@ if acquire_images:
 #SAVE FRAMES UNTIL ARDUINO SIGNALS TO STOP
 print('Beginning camera acquisition...')
 #opto_counter = 0 #initalize opto_counter
-# send trigger
-if send_trigger:
-    string_to_send = "<{}>".format("1")
-    byte_string = str.encode(string_to_send)
-    arduino.write(byte_string)
-
+#if send_trigger:
+#    string_to_send = "<{}>".format("1")
+#    byte_string = str.encode(string_to_send)
+#    ser.write(byte_string)
+#
 nframes=0
 start_time = time.time()
 last_t = start_time
@@ -346,8 +405,8 @@ while time.time()-start_time < record_time:
             #print(n)
         now = time.time()
         currt = now-start_time
-        #cam0.start_one_shot()
-        curr_frame = cam0.dequeue()
+        #cam.start_one_shot()
+        curr_frame = cam.dequeue()
         im_array = Image.fromarray(curr_frame.copy())
         #im_array,meta  = camera.capture_wait() 
         #camera.queue_frame()
@@ -405,12 +464,19 @@ print(str.format('total recording time: {} min',(time.time()-start_time)/60))
 
 #%%
 
+# Stop arduino
+if send_trigger:
+    ser.write(str.encode('F')) #('S')#start arduino trigger
+    #ser.write('F')#start arduino trigger
+    print('Stopped arduino....')
+
+
 print('Acquisition Finished!')
 #output performance
 acq_duration=time.time()-start_time
-print('Total Time: '+str(acq_duration))
+print('Total Time: %.3f sec' % acq_duration)
 expected_frames=int(np.floor(np.around(acq_duration,2)/frame_period))
-print('Actual Frame Count = '+str(nframes))
+print('Actual Frame Count = '+str(nframes+1))
 print('Expected Frame Count = '+str(expected_frames))
 
 # write performance to file
@@ -423,8 +489,8 @@ performance_file.close()
 if acquire_images:
     #camera.capture_end()
     #camera.close()
-    cam0.stop_capture()
-    #cam0.stop_one_shot()
+    cam.stop_capture()
+    #cam.stop_one_shot()
     print('Connection closed')
 
 if im_queue is not None:
@@ -458,11 +524,14 @@ if save_images:
     print('Disk writer terminated')        
 
 # close arduino
-if send_trigger:
-    string_to_send = "<{}>".format("1")
-    byte_string = str.encode(string_to_send)
-    arduino.write(byte_string)
+#if send_trigger:
+#    string_to_send = "<{}>".format("1")
+#    byte_string = str.encode(string_to_send)
+#    arduino.write(byte_string)
+#
 
+print('Closing serial connection...')
+ser.close()
 
 
 print("***** Done! ******")
