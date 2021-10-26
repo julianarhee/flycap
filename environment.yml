@@ -1,0 +1,22 @@
+name: flycap
+channels:
+  - defaults
+  - menpo
+  - conda-forge
+dependencies:
+  - python=3.7
+  - numpy
+  - ipython
+  - scipy
+  - pip
+  - matplotlib
+  - libdc1394
+  - pyqtgraph
+  - ipykernel
+  - h5py
+  - pandas
+  - opencv
+  - ffmpeg
+  - imutils
+prefix: /Users/julianarhee/anaconda3/envs/flycap
+
