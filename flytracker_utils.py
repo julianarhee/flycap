@@ -16,13 +16,124 @@ import numpy as np
 import pandas as pd
 import mat73
 import pylab as pl
-
-#%%
-
 import re
+import matplotlib as mpl
+
+#%% General functions
+
 natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split('(\d+)', s)]
 
+
+#%% Drawing functions
+def draw_ellipse(ax, centroid, length, width, angle, asymmetry=0.0, 
+        fill=True, edgecolor='none', facecolor='k', alpha=1, **kwargs):
+        '''
+        Plot an ellipse (adapted from: 
+        https://github.com/cta-observatory/ctapipe)
+
+        Parameters
+        ----------
+        centroid: (float, float)
+            Position of centroid
+        length: float
+            Major axis
+        width: float
+            Minor axis
+        angle: float
+            Rotation angle wrt x-axis about the centroid, anticlockwise, in radians
+        asymmetry: float
+            3rd-order moment for directionality if known
+        fill: bool
+            Fill ellipse or no
+        edgecolor: str or 3-val tuple
+            Color of ellipse edge
+        facecolor: str or 3-val tuple
+            Color of ellipse face (fill should be true)
+        alpha: float
+            Alpha of ellipse
+        kwargs:
+            any matplotlib style arguments to pass to the Ellipse patch
+        '''
+        ellipse = mpl.patches.Ellipse(
+            xy=centroid,
+            width=length,
+            height=width,
+            angle=np.degrees(angle),
+            fill=fill, edgecolor=edgecolor, facecolor=facecolor,
+            alpha=alpha, 
+            **kwargs,
+        )
+
+        ax.add_patch(ellipse)
+        ax.figure.canvas.draw()
+        return ellipse
+
+
+def draw_ellipse_on_array(xpos, ypos, major, minor, theta, 
+            height, width, bg_color=255, fill=True, alpha=1,
+            facecolor=(0,0,0)):
+    '''
+    Given ellipse parameters, draw onto array as a frame.
+    Note:  Flips array upside down so 0 is at the top (image),
+    so coordinates should just be the output of FlyTracker.
+    '''
+    lw=-1 if fill else 1
+    img_arr = np.ones((height, width, 3), dtype=np.uint8)*bg_color
+    #ctr = xpos, ypos
+    #axes = major, minor
+    top_right = (
+        (xpos, ypos),      # (x, y)
+        (major, minor),   # (full_minor_axis, full_major_axis)
+        np.rad2deg(theta), # angle
+        -180, 180
+    )
+    ctr = int(xpos), int(height-ypos)
+    axes = int(round(major/2.)), int(round(minor/2.))
+    cv2.ellipse(img_arr, ctr, axes, np.rad2deg(theta), -180, 180, (0,0,0), -1)
+
+    if alpha != 1:
+        overlay = np.ones((height, width, 3), dtype=np.uint8)*bg_color
+        img_arr = cv2.addWeighted(overlay, alpha, img_arr, 1 - alpha, 0)
+   
+    img = np.flipud(img_arr)
+
+    return img
+
+
+
 #%% Movie loading/formatting
+
+def image_resize(image, width = None, height = None, inter = cv2.INTER_AREA):
+    # initialize the dimensions of the image to be resized and
+    # grab the image size
+    dim = None
+    (h, w) = image.shape[:2]
+
+    # if both the width and height are None, then return the
+    # original image
+    if width is None and height is None:
+        return image
+
+    # check to see if the width is None
+    if width is None:
+        # calculate the ratio of the height and construct the
+        # dimensions
+        r = height / float(h)
+        dim = (int(w * r), height)
+
+    # otherwise, the height is None
+    else:
+        # calculate the ratio of the width and construct the
+        # dimensions
+        r = width / float(w)
+        dim = (width, int(h * r))
+
+    # resize the image
+    resized = cv2.resize(image, dim, interpolation = inter)
+
+    # return the resized image
+    return resized
+
 
 def get_movie_metadata(curr_movie_path):
     '''

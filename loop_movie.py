@@ -101,9 +101,15 @@ if __name__=='__main__':
         default='melF_melM_15mm_1chamber')
     ap.add_argument("-v", "--video", required=True,
         help="Full path to input video file")
+    ap.add_argument("--fps", required=False, default=None,
+        help="Frame rate to play video (default plays original)")
+    ap.add_argument("-W", "--width", required=False, default=400,
+        help="Window width, pixels (default: 400)")
 
     args = vars(ap.parse_args())
     video_fpath = args['video']
+    fps = float(args['fps']) if args['fps'] is not None else None
+    image_width = int(args['width'])
     fly_ix = 1
     bodypart='body'
     #datakey='melF_melM_15mm_1chamber'
@@ -125,36 +131,46 @@ if __name__=='__main__':
     fvs = FileVideoStream(video_fpath).start()
     time.sleep(1.0)
     # start the FPS timer
-    fps = FPS().start()
+    fps_timer = FPS().start()
     mov_meta = futils.get_movie_metadata(video_fpath)
-    frame_dur = int(round((1./mov_meta['framerate'])*1000))
-    print(frame_dur)
+    if fps is None:
+        fps = mov_meta['framerate']
+
+    frame_dur = int(np.round((1./fps)*1000))
+    print("Requested frame rate %.2f Hz (%.2f ms/frame)" % (fps, frame_dur))
+
 #%%
     # loop over frames from the video file stream
-    while fvs.more():
-        # grab the frame from the threaded video file stream, resize
-        # it, and convert it to grayscale (while still retaining 3
-        # channels)
-
+    start_t = time.time()
+    n=0
+    while (1): #fvs.more():
+        t_start=time.perf_counter()
         frame = fvs.read()
-        frame = imutils.resize(frame, width=450)
+        frame = imutils.resize(frame, width=image_width)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         frame = np.dstack([frame, frame, frame])
         # display the size of the queue on the frame
-        cv2.putText(frame, "Queue Size: {}".format(fvs.Q.qsize()),
-            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)	
+        #cv2.putText(frame, "Queue Size: {}".format(fvs.Q.qsize()),
+        #    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)	
         # show the frame and update the FPS counter
         cv2.imshow("Frame", frame)
-        cv2.waitKey(frame_dur)
-        fps.update()
 
+        n+=1
+        fps_timer.update()
+
+        if not fvs.more():
+            break
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+        while (time.perf_counter()-t_start) < (1/fps):
+            pass
 
     # stop the timer and display FPS information
-    fps.stop()
-    print("[INFO] elasped time: {:.2f}".format(fps.elapsed()))
-    print("[INFO] approx. FPS: {:.2f}".format(fps.fps()))
+    fps_timer.stop()
+    print("[INFO] elapsed time: {:.2f}".format(fps_timer.elapsed()))
+    print("[INFO] approx. FPS: {:.2f}".format(fps_timer.fps()))
+    total_t = time.time()-start_t
+    print("Showed %i frames across %.2fs (~%.2fHz)" % (n, total_t, n/total_t))
     # do a bit of cleanup
     cv2.destroyAllWindows()
     fvs.stop()

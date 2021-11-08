@@ -1,28 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Oct 13 17:07:35 2021
+Created on Tue Oct 26 17:55:34 2021
 
 @author: julianarhee
 """
 #%%
 import os
 import glob
-from re import I
 import cv2
-#import scipy.io
 import importlib
 
 import numpy as np
 import pandas as pd
-from pandas.core.base import NoNewAttributesMixin
-#import mat73
 import pylab as pl
 
-#%%
 import flytracker_utils as futils
 import matplotlib as mpl
 
+from re import I
+
+#%%
 #%%
 def extracted_params_to_frames(df, metadata, fly_id=0, bodypart='body',
                         n_frames=None, save_images=False, dst_dir=None):
@@ -83,7 +81,7 @@ def extracted_params_to_frames(df, metadata, fly_id=0, bodypart='body',
             print(".... processing %i of %i images" % (int(fi+1), n_total))
         xpos, ypos, theta, major, minor =  v[['pos_x', 'pos_y', 'ori',\
                     'major_axis_len', 'minor_axis_len']].values
-        img = draw_ellipse_on_array(xpos, ypos, major, minor, theta, 
+        img = futils.draw_ellipse_on_array(xpos, ypos, major, minor, theta, 
                     height, width, bg_color=255, fill=True)
 
         if save_images:
@@ -137,13 +135,17 @@ def create_frames_from_positions(pos_df, major, minor=None, theta=0,
     for fi, (xpos, ypos) in enumerate(pos_df).iterrows()):
         if fi%100==0:
             print(".... processing %i of %i images" % (int(fi+1), n_total))
-        img = draw_ellipse_on_array(xpos, ypos, major, minor, theta, 
+        img = futils.draw_ellipse_on_array(xpos, ypos, major, minor, theta, 
                     height, width, bg_color=255, fill=True)
 
         tmp_fpath = os.path.join(dst_dir, '%03d.png' % fi)
         cv2.imwrite(tmp_fpath, img)
 
     return 
+
+
+#%% Create args
+
 
 
 
@@ -207,7 +209,7 @@ mov_basename = '%s_%s' % (bodypart, fly_sex[fly_ix])
 futils.remove_tmp_frames_dir(vmeta)
 tmp_dir = futils.create_tmp_frames_dir(vmeta)
 print(tmp_dir)
-im_frames = extracted_params_to_frames(df, vmeta, fly_id=fly_ix,
+im_frames = frames_from_traces(df, vmeta, fly_id=fly_ix,
                 bodypart=bodypart, n_frames=20, save_images=True, dst_dir=tmp_dir)
 #%%
 n_frames_plot=20
@@ -227,7 +229,7 @@ futils.make_movie_from_frame_dir(video_outfile, tmp_dir, fps=30.)
 
 futils.remove_tmp_dirs(vmeta)
 
-#%%
+#
 
 #%% Load segmentations (pixel maps) for body parts
 ddict = load_segmentation(curr_movie, src_dir)
