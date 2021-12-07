@@ -10,14 +10,14 @@ import pandas as pd
 import numpy as np
 import pylab as pl
 
-import flytracker_utils as futils
+import utils as utils
 
 #%%
 experiment_name = 'test'
-base_dir = '/Users/julianarhee/Documents/ruta_lab/projects/free_behavior/acquisition'
+#base_dir = '/Users/julianarhee/Documents/ruta_lab/projects/free_behavior/acquisition'
+base_dir = '/home/julianarhee/Documents/flycap'
 
-
-found_dirs = sorted(glob.glob(os.path.join(base_dir, '%s_*' % experiment_name)), key=futils.natsort)
+found_dirs = sorted(glob.glob(os.path.join(base_dir, '%s_*' % experiment_name)), key=utils.natsort)
 len(found_dirs)
 src_dir = found_dirs[-1] # get most recent
 
@@ -43,7 +43,7 @@ t_diffs.describe()
 #%%
 
 frames_dir = os.path.join(src_dir, 'frames')
-frames = sorted(glob.glob(os.path.join(frames_dir, '*.png')), key=futils.natsort)
+frames = sorted(glob.glob(os.path.join(frames_dir, '*.png')), key=utils.natsort)
 print("Found %i frames" % len(frames))
 
 for f in frames[0:20]:

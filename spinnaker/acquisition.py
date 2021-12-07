@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 #%%
+
 from __future__ import (print_function, unicode_literals, division,
                 absolute_import)
 
@@ -24,14 +25,17 @@ import imageio
 
 from struct import pack, unpack, calcsize
 
-from pydc1394 import Camera, DC1394Error
-from pydc1394.camera2 import Context
-
+#from pydc1394 import Camera, DC1394Error
+#from pydc1394.camera2 import Context
+#
 from PIL import Image
+#import pyqtgraph as pg
+#from pyqtgraph.Qt import QtCore, QtGui
+#
+from simple_pyspin import Camera
+import camera_utils as cutils
 
 
-import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtGui
 
 #%%
 #global first_write
@@ -40,36 +44,26 @@ def flushBuffer():
     #Flush out serial buffer
     global ser
     tmp=0
-    while tmp is not '':
+    while tmp != '':
         tmp=ser.read()
 
 
 #%%
 
-def set_camera_default(cam, mode='10mm_x_1chamber'):
-    mode_num = 0
-    cam.mode = cam.modes[mode_num] # this is what Nathan uses
-
-    #Change position to 0,0 (we don't want any offset)
-    image_pos=(0,0) #TODO fix this
-
-    #To change resolution of acquisition
-    image_size = (960, 776) #(1080,1080)
-    cam.mode.image_size = image_size
-
-    image_pos = (560, 388) # center ROI # (0, 0)
-    cam.mode.image_position = image_pos
-
-    return cam 
-
-
-def save_camera_info(cam, caminfo_fpath):
+def save_camera_info(cam, output_dir='/tmp'): #caminfo_fpath):
     '''Save camera settings to file'''
-    mode_dict = object_fields_dict(cam.mode)
-    mode_dict.pop('setup')
-    with open(caminfo_fpath, 'w') as f:
-        json.dump(mode_dict, f, indent=4) 
+#    mode_dict = object_fields_dict(cam.mode)
+#    mode_dict.pop('setup')
+#    with open(caminfo_fpath, 'w') as f:
+#        json.dump(mode_dict, f, indent=4) 
+#
+    cam_name = cam.DeviceVendorName.strip() + ' ' + cam.DeviceModelName.strip()
+    ofn = os.path.join(output_dir, cam_name.replace(' ', '_') + '.md')
+    print('Generating documentation in file: %s' % ofn)
 
+    with open(ofn, 'wt') as f:
+        f.write(cam.document())
+        
     return
 
 def object_fields_dict(cam_mode):
@@ -85,61 +79,31 @@ def object_fields_dict(cam_mode):
                 print(att, e) #pass
     return mode_dict
 
-# Viewing
-class CameraPlot:
-    def __init__(self):
-        self.init_win()
-
-    def init_win(self):
-        self.win = QtGui.QMainWindow()
-        self.win.show()
-        self.win.resize(600, 400)
-        self.win.setWindowTitle("pydc1394 + pyqtgraph")
-        self.img = pg.ImageView()
-        self.win.setCentralWidget(self.img)
-
-    def process_images(self, frame):
-        #QtCore.QTimer.singleShot(50, self.process_images)
-#        frame = None
-#        while True:
-#            frame_ = self.camera.dequeue(poll=True)
-#            if frame_ is not None:
-#                if frame is not None:
-#                    frame.enqueue()
-#                frame = frame_
-#            else:
-#                break
-#        if frame is None:
-#            return
-        im = frame.copy().T
-#        frame.enqueue()
-        self.img.setImage(im, autoRange=False, autoLevels=False,
-            autoHistogramRange=False)
-
-        self.img.autoRange()
-        self.img.autoLevels()
-        self.show()
-
-
-#    def stop_camera(self):
-#        self.camera.stop_video()
-#        self.camera.stop_capture()
-#
-#    def deinit_camera(self):
-#        pass
-
 #%%
-
 def run(options):
 #%%
     parser = optparse.OptionParser()
-    parser.add_option('--output-path', action="store", dest="base_dir", default="/tmp/frames", help="out path directory [default: /tmp/frames]")
+    parser.add_option('--dst', action="store", dest="dst_dir", 
+                      default="/home/julianarhee/Documents/flycap", 
+                      help="out path directory [default: /tmp/frames]")
+    parser.add_option('--port', action='store', dest='port', default='/dev/ttyACMO',
+        help='serial port')
+
     parser.add_option('-E', '--experiment_name', action="store", dest="experiment_name", default="test", help="experiment_name of output file [default: test")
     parser.add_option('--output-format', action="store", dest="output_format", type="choice", choices=['png', 'npz'], default='png', help="out file format, png or npz [default: png]")
     parser.add_option('--write-process', action="store_true", dest="save_in_separate_process", default=True, help="spawn process for disk-writer [default: True]")
     parser.add_option('--write-thread', action="store_false", dest="save_in_separate_process", help="spawn threads for disk-writer")
 
-    parser.add_option('-f', '--frame-rate', action="store", dest="frame_rate", help="requested frame rate", type="float", default=40.0)
+    parser.add_option('-F', '--frame-rate', action="store", dest="framerate", 
+                      help="requested frame rate", type="float", default=100.0)
+    parser.add_option('-W', '--width', action="store", dest="width", 
+                      help="Image width (default: 1080)", type="int", default=1280)
+    parser.add_option('-H', '--height', action="store", dest="height", 
+                      help="Image height (default: 1080)", type="int", default=960)
+    parser.add_option('-G', '--gamma', action="store", dest="gamma", 
+                      help="Image gamma (default: 1.5)", type="float", default=1.5)
+ 
+
     parser.add_option('--dur', action="store", dest="recording_duration", help="Recording duration (default: 10min)", type="float", default=10.0)
 
     parser.add_option('--trigger', action="store_true", dest="send_trigger", help="send trigger out to arduino", default=False)
@@ -152,16 +116,19 @@ def run(options):
     save_images = options.save_images
     send_trigger = options.send_trigger
 
-    base_dir = options.base_dir
+    dst_dir = options.dst_dir
     output_format = options.output_format
     experiment_name = options.experiment_name
 
     save_in_separate_process = options.save_in_separate_process
     recording_duration = float(options.recording_duration)
     send_trigger = options.send_trigger
-    frame_rate = options.frame_rate
-
-    frame_period = float(1/frame_rate)
+    framerate = options.framerate
+    width = int(options.width)
+    height = int(options.height)
+    gamma = float(options.gamma)
+    
+    frame_period = float(1/framerate)
     save_as_png = False
     save_as_npz = False
     if output_format == 'png':
@@ -169,27 +136,35 @@ def run(options):
     elif output_format == 'npz':
         save_as_npz = True
 
-    print("Recording %.2f min. session @ %.2fHz" % (recording_duration, frame_rate))
+    port = options.port
+
+    print("Recording %.2f min. session @ %.2fHz (img: %ix%i)" % (recording_duration, framerate, width, height))
     time.sleep(2)
 
 #%% tmp vars
     interactive=False
-    base_dir = '/Users/julianarhee/Documents/ruta_lab/projects/free_behavior/acquisition'
+    # dst_dir = '/Users/julianarhee/Documents/ruta_lab/projects/free_behavior/acquisition'
     if interactive:
+        dst_dir = '/home/julianarhee/Documents/flycap/testdata'
         experiment_name = 'test'
-        frame_rate=40.
-        frame_period = float(1/frame_rate)
         save_as_png = True
         save_in_separate_process = True 
         acquire_images = True
         save_images = True
         send_trigger = True
+        port = '/dev/ttyACM0'
+       
+        framerate = 97.0 
+        width = 1280
+        height = 960
+        gamma = 1.5
+        frame_period = float(1/framerate)
     
 #%%
     #set up serial connection
 
     if send_trigger:
-        port = "/dev/cu.usbmodem145201"
+        # port = "/dev/cu.usbmodem145201"
         baudrate = 115200
 
         print("# Please specify a port and a baudrate")
@@ -203,19 +178,20 @@ def run(options):
         print("Connected serial port...")
     else:
         ser=None
+        
 #%% 
     # Make the output paths if it doesn't already exist
     try:
-        os.makedirs(base_dir)
+        os.makedirs(dst_dir)
     except OSError as e:
         if e.errno != errno.EEXIST:
             raise e
         pass
-    print(base_dir)
+    print(dst_dir)
 
     dateformat = '%Y%m%d%H%M%S%f'
     tstamp=datetime.now().strftime(dateformat)
-    dst_dir = os.path.join(base_dir, '%s_%s' % (experiment_name, tstamp))
+    dst_dir = os.path.join(dst_dir, '%s_%s' % (experiment_name, tstamp))
     print(dst_dir)
 
     try:
@@ -251,33 +227,31 @@ def run(options):
         pvapi_retries = 50
         # get the camera list
         print('Connecting to camera...')
-        context0 = Context()
+        # context0 = Context()
         n = 0
         # Let it have a few tries in case the camera is waking up
         while cam is None and n < pvapi_retries:
             try:
-                cameras = context0.cameras
-                print("Camera IDs:\n", [int(str(cam_id[0]), 16) for cam_id in cameras])
-                if len(cameras)>0:
-                    print("Opening camera!")
-                    cam = Camera() #Camera()
+                cam = cutils.create_default_camera(framerate=framerate, 
+                                                width=width, height=height, gamma=gamma) #Camera() #Camera()
                 n += 1
                 print('\rsearching...')
                 time.sleep(0.5)
             except Exception as e:
-                # print("%s" % e)
+                print("%s" % e)
                 cam = None
-    print("Bound to PvAPI camera (name: %s, uid: %s)" % (cam.model, cam.guid))
-
+    print("Bound to PvAPI camera (name: %s)" % (cam.DeviceModelName)) #, cam.guid))
+    
+    #%%
     #%% TODO:  set these values manually
     #those can be automated, the other are manual
-    try:
-        cam.brightness.mode = 'auto' 
-        cam.exposure.mode = 'manual' #'auto' # 2.414 @ 40Hz 
-        cam.white_balance.mode = 'auto'
-    except AttributeError: # thrown if the camera misses one of the features
-        pass
-
+#    try:
+#        cam.brightness.mode = 'auto' 
+#        cam.exposure.mode = 'manual' #'auto' # 2.414 @ 40Hz 
+#        cam.white_balance.mode = 'auto'
+#    except AttributeError: # thrown if the camera misses one of the features
+#        pass
+#
 #%%
     # Choose Format_7 mode
     # See:  ./pydc1394/dc1394.py -- video_mode_vals
@@ -311,13 +285,13 @@ def run(options):
 
     #%
 
-    cam = set_camera_default(cam, mode='10mm_x_1chamber')
+    #cam = set_camera_default(cam, mode='10mm_x_1chamber')
     #for feat in cam.features:
     #    print("%s (cam): %s" % (feat,cam.__getattribute__(feat).value))
 
     #%%
-    caminfo_fpath = os.path.join(dst_dir, 'caminfo.json')
-    save_camera_info(cam, caminfo_fpath)
+    #caminfo_fpath = os.path.join(dst_dir, 'caminfo.json')
+    save_camera_info(cam, dst_dir)
 
 #%%
     # -------------------------------------------------------------
@@ -335,11 +309,11 @@ def run(options):
         print('Disk-saving thread active...')
         # open time file and set up headers
         time_outfile = open (frametimes_fpath,'w+')
-        time_outfile.write('frame_number\tframe_id\tsync_in1\tsync_in2\ttime_stamp\n')
+        time_outfile.write('frame_number\tsync_in1\tsync_in2\ttime_stamp\n')
 
         currdict = im_queue.get()
         while currdict is not None:
-            time_outfile.write('%i\t%i\t%i\t%i\t%s\n' % (currdict['frame_count'], currdict['frame_id'], currdict['sync_in1'], currdict['sync_in2'],currdict['time_stamp']))
+            time_outfile.write('%i\t%i\t%i\t%s\n' % (currdict['frame_count'], currdict['sync_in1'], currdict['sync_in2'],currdict['time_stamp']))
 
             # print name
             if save_as_png:
@@ -383,24 +357,18 @@ def run(options):
     t = 0
     last_t = None
 
-    report_period = 10*frame_rate # frames
+    report_period = 10*framerate # frames
 
     #Capture images and save them
     #record_time = 2. # in sec.
     record_time = recording_duration*60. 
-    samp_rate = 1./frame_rate
+    samp_rate = 1./framerate
     time_vec=np.zeros([np.int32(record_time/samp_rate)])
 
 
     if acquire_images:
         #OPEN STREAM
-        #camera.capture_start()
-        #camera.queue_frame()
-        cam.start_capture()
-        cam.flush()
-        cam.start_video()
-        #cam.start_one_shot()
-        #orig_time = time.time()
+        cam.start()
 
     if send_trigger:
         #byte_string = str.encode('S')
@@ -419,9 +387,6 @@ def run(options):
         while time.time()-start_time < record_time:
             #print('hi')
             if acquire_images:
-                #for i in range(np.int32(record_time/samp_rate)):
-                #target_time = orig_time+samp_rate*i
-                #print(time.time()-last_t)
                 n=0
                 while (time.time()-now) < samp_rate: #target_time:
                     #print('Frame %i: %.3f' % (nframes, time.time()-last_t)
@@ -430,18 +395,17 @@ def run(options):
                     #print(n)
                 now = time.time()
                 currt = now-start_time
-                #cam.start_one_shot()
-                curr_frame = cam.dequeue()
+                curr_frame = cam.get_array() #cam.dequeue()
 
                 im_array = Image.fromarray(curr_frame.copy())
-                #im_array,meta  = camera.capture_wait() 
-                #camera.queue_frame()
                 #print('--- frame_id:%i, %.3f' % (curr_frame.frame_id, currt))
+                print('--- frame_id:%i, %.3f' % (nframes, currt))
+
                 if save_images:
                     fdict = dict()
                     fdict['im_array'] = im_array #curr_frame #im_array
                     fdict['frame_count'] = nframes
-                    fdict['frame_id'] = int(curr_frame.frame_id)
+                    #fdict['frame_id'] = int(curr_frame.frame_id)
                     fdict['sync_in1'] = 0 #meta['s1']
                     fdict['sync_in2'] = 0 #meta['s2']
                     fdict['time_stamp'] = currt #- start_time
@@ -466,7 +430,7 @@ def run(options):
                         print('avg frame rate: %f ' % (report_period / (currt - last_t)))
                     last_t=currt
                 #print('done')
-                curr_frame.enqueue()
+                #curr_frame.enqueue()
 
     except Exception as e:
         traceback.print_exc()
@@ -494,14 +458,12 @@ def run(options):
     performance_file = open(performance_fpath,'w+')
     performance_file.write('frame_rate\tframe_period\tacq_duration\tframe_count\texpected_frame_count\tmissingFrames\n')
     performance_file.write('%10.4f\t%10.4f\t%10.4f\t%i\t%i\t%i\n'%\
-        (frame_rate, frame_period, acq_duration, nframes, expected_frames, expected_frames-nframes))
+        (framerate, frame_period, acq_duration, nframes, expected_frames, expected_frames-nframes))
     performance_file.close()
 
     if acquire_images:
         #camera.capture_end()
-        #camera.close()
-        cam.stop_capture()
-        #cam.stop_one_shot()
+        cam.close()
         print('Connection closed')
 
     if im_queue is not None:
