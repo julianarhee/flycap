@@ -97,7 +97,7 @@ def run(options):
     parser.add_option('-F', '--frame-rate', action="store", dest="framerate", 
                       help="requested frame rate", type="float", default=100.0)
     parser.add_option('-W', '--width', action="store", dest="width", 
-                      help="Image width (default: 1080)", type="int", default=1280)
+                      help="Image width (default: 1080)", type="int", default=960)
     parser.add_option('-H', '--height', action="store", dest="height", 
                       help="Image height (default: 1080)", type="int", default=960)
     parser.add_option('-G', '--gamma', action="store", dest="gamma", 
@@ -155,7 +155,7 @@ def run(options):
         port = '/dev/ttyACM0'
        
         framerate = 97.0 
-        width = 1280
+        width = 960
         height = 960
         gamma = 1.5
         frame_period = float(1/framerate)
@@ -357,7 +357,7 @@ def run(options):
     t = 0
     last_t = None
 
-    report_period = 10*framerate # frames
+    report_period = 60*framerate # frames
 
     #Capture images and save them
     #record_time = 2. # in sec.
@@ -399,7 +399,6 @@ def run(options):
 
                 im_array = Image.fromarray(curr_frame.copy())
                 #print('--- frame_id:%i, %.3f' % (curr_frame.frame_id, currt))
-                print('--- frame_id:%i, %.3f' % (nframes, currt))
 
                 if save_images:
                     fdict = dict()
@@ -428,6 +427,8 @@ def run(options):
                 if nframes % report_period == 0:
                     if last_t is not None:
                         print('avg frame rate: %f ' % (report_period / (currt - last_t)))
+                        print('--- frame_id:%i, %.3f' % (nframes, currt))
+
                     last_t=currt
                 #print('done')
                 #curr_frame.enqueue()
