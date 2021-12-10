@@ -3,14 +3,14 @@
 '''
 @File    :   viewer2.py
 @Time    :   2021/12/06 13:09:45
-@Author  :   julianarhee 
+@Author  :   julianarhee
 @Contact :   juliana.rhee@gmail.com
 '''
 
 #%%
 import sys
 import cv2
-import numpy as np  
+import numpy as np
 import logging
 import time
 #from point_grey import Camera
@@ -39,20 +39,20 @@ logging.basicConfig(level = logging.INFO)  #set to DEBUG if you want way too muc
 
 #%%
 if __name__ == "__main__":
-    """ 
+    """
     Test PySpin api/SpinnakerCamera() using opencv.
     grasshopper maxfov/fps: 2048 x 2048/90
     chameleon maxfov: 1288x968/30
     """
- 
-#    framerate = 97.0 
+
+#    framerate = 97.0
 #    width = 1280
 #    height = 960
 #    gamma = 1.5
 #
 ##%% Initialize camera
-#    cam = Camera() 
-#    cam.init() 
+#    cam = Camera()
+#    cam.init()
 #
 ##%%
 #    cam.VideoMode = 'Mode8'
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 #    cam.AcquisitionFrameRateEnabled = True
 #    cam.AcquisitionFrameRate = framerate
 #
-#    # Gain 
+#    # Gain
 #    # --------------------------------------------------------------------
 #    # To control the exposure settings, we need to turn off auto
 #    cam.GainAuto = 'Off'
@@ -82,7 +82,7 @@ if __name__ == "__main__":
 #    cam.Gain = gain
 #    cam.ExposureAuto = 'Off'
 #    cam.ExposureTime = min([(1./framerate)*1E6, 10294.556]) #10000 # microseconds
-#        
+#
 #    # Gamma
 #    # --------------------------------------------------------------------
 #    # If we want an easily viewable image, turn on gamma correction.
@@ -94,8 +94,12 @@ if __name__ == "__main__":
 #    except:
 #        print("Failed to change Gamma correction (not avaiable on some cameras).")
 #
-    framerate=100.0
-    cam = cutils.create_default_camera(framerate=framerate)
+    framerate=100
+    width=960
+    height=960
+    gamma=1.6
+    cam = cutils.create_default_camera(framerate=framerate,
+            width=width, height=height, gamma=gamma)
 #%%
     logging.info("\n**Testing PgCam()**".format(framerate))
     cv2.namedWindow("PgCam", cv2.WINDOW_NORMAL)
@@ -105,17 +109,16 @@ if __name__ == "__main__":
     while True:
         image = cam.get_array() #pgCam.read()
         cv2.imshow("PgCam", image)
-        key = cv2.waitKey(1)  
+        key = cv2.waitKey(1)
         if key == 27: #escape key
             logging.info("Streaming stopped")
             cv2.destroyAllWindows()
             #pgCam.release()
             cam.close()
             break
- 
+
 
 #%%
 
 
 #cam.close()
-
