@@ -320,7 +320,6 @@ def run(options):
                 imageio.imsave('%s/%s.png' % (frames_dir, currdict['frame_count']), currdict['im_array'])
             else:
                 np.savez_compressed('%s/%s.npz' % (frames_dir, currdict['frame_count']), currdict['im_array'])
-            #print('... %i' % currdict['frame_count'])
 
             currdict = im_queue.get()
             
