@@ -192,7 +192,7 @@ def print_device_info(nodemap):
     return result
 
 
-def acquire_images(cam, nodemap):
+def acquire_images(cam, nodemap, NUM_IMAGES=10):
     """
     This function acquires 10 images from a device, stores them in a list, and returns the list.
     please see the Acquisition example for more in-depth comments on acquiring images.
@@ -328,7 +328,7 @@ def acquire_images(cam, nodemap):
     return result, images
 
 
-def run_single_camera(cam):
+def run_single_camera(cam, NUM_IMAGES=10):
     """
     This function acts as the body of the example; please see NodeMapInfo example
     for more in-depth comments on setting up cameras.
@@ -353,8 +353,10 @@ def run_single_camera(cam):
         # Retrieve GenICam nodemap
         nodemap = cam.GetNodeMap()
 
+        #for n_images in n_images_list:
+        #    print("Getting vid %i of %i -------------------------------------" % (int(i+1), n_videos))
         # Acquire list of images
-        err, images = acquire_images(cam, nodemap)
+        err, images = acquire_images(cam, nodemap, NUM_IMAGES=NUM_IMAGES)
         if err < 0:
             return err
 
@@ -378,6 +380,7 @@ def main():
     :return: True if successful, False otherwise.
     :rtype: bool
     """
+    NUM_IMAGES=24000
     result = True
 
     # Retrieve singleton reference to system object
@@ -411,7 +414,7 @@ def main():
 
         print('Running example for camera %d...' % i)
 
-        result &= run_single_camera(cam)
+        result &= run_single_camera(cam, NUM_IMAGES=NUM_IMAGES)
         print('Camera %d example complete... \n' % i)
 
     # Release reference to camera
