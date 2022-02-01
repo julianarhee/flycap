@@ -15,19 +15,27 @@ def create_default_camera(framerate=97.0, width=1280, height=960, gamma=1.5):
 #    width = 1280
 #    height = 960
 #    gamma = 1.5
+    gain=0.0
+   
+    # 
     framerate = min([framerate, 97.])
-#%% Initialize camera
+    
+    # Initialize camera
     cam = Camera() 
     cam.init() 
 
 #%%
-    cam.VideoMode = 'Mode8'
+    # Image format
+    # ------------------------------------------------------------------
+    cam.VideoMode = 'Mode0'
     cam.PixelFormat = 'Mono8'
+    cam.OffsetX = 0
+    cam.OffsetY = 0
     cam.Width = width
     cam.Height = height
     # center frame
-    cam.OffsetX = (cam.SensorWidth - cam.Width) //4
-    cam.OffsetY = (cam.SensorHeight - cam.Height) //4
+    cam.OffsetX = (cam.SensorWidth - cam.Width) //2
+    cam.OffsetY = (cam.SensorHeight - cam.Height) //2
     print("Camera BB. x: {}, {}, y: {}, {} (Image is {}x{})".format(\
         cam.OffsetX, cam.OffsetX+cam.Width, cam.OffsetY, cam.OffsetY+cam.Height, cam.Width, cam.Height))
 
@@ -47,7 +55,7 @@ def create_default_camera(framerate=97.0, width=1280, height=960, gamma=1.5):
     print("Setting gain to %.1f dB" % gain)
     cam.Gain = gain
     cam.ExposureAuto = 'Off'
-    cam.ExposureTime = min([(1./framerate)*1E6, 10294.556]) #10000 # microseconds
+    cam.ExposureTime = 16.67*1E3 #min([(1./framerate)*1E6, 10294.556]) #10000 # microseconds
         
     # Gamma
     # --------------------------------------------------------------------

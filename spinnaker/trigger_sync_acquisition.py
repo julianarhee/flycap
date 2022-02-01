@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+# -*- encoding: utf-8 -*-
+'''
+@File    :   trigger_sync_acquisition.py
+@Time    :   2022/02/01 16:26:06
+@Author  :   julianarhee 
+@Contact :   juliana.rhee@gmail.com
+
+Adapted old face-tracker code to test acquistion w basler
+'''
+
 #%%
 
 from __future__ import (print_function, unicode_literals, division,
@@ -318,59 +328,50 @@ print('Beginning camera acquisition...')
 nframes=0
 start_time = time.time()
 last_t = start_time
-now=start_time
-try:
-    while time.time()-start_time < record_time:
-        if acquire_images:
-            n=0
-            while (time.time()-now) < samp_rate: #target_time:
-                #print('Frame %i: %.3f' % (nframes, time.time()-last_t)
-                time.sleep(0.0001)
-                n+=1
-            now = time.time()
-            currt = now-start_time
-            curr_frame = cam.get_array() #cam.dequeue()
+curr_frame=np.random.rand(width,height)
+print(curr_frame.shape)
+#now=start_time
+n=0
+while (1):
+    if acquire_images:
+        
+        currt = time.time()-start_time
+        curr_frame = cam.get_array() #cam.dequeue()
+        nframes+=1
+        #im_array = Image.fromarray(curr_frame.copy())
+        #print('--- frame_id:%i, %.3f' % (curr_frame.frame_id, currt))
 
-            im_array = Image.fromarray(curr_frame.copy())
-            #print('--- frame_id:%i, %.3f' % (curr_frame.frame_id, currt))
+        if save_images:
+            fdict = dict()
+            fdict['im_array'] = curr_frame #im_array
+            fdict['frame_count'] = nframes
+            #fdict['frame_id'] = int(curr_frame.frame_id)
+            fdict['sync_in1'] = 0 #meta['s1']
+            fdict['sync_in2'] = 0 #meta['s2']
+            fdict['time_stamp'] = currt #- start_time
+            im_queue.put(fdict)
+            #stop saving frames when syncin2 level goes to 0
+            #if int(meta['s2'])<1:
+            #    break
+        
+        # Show frame
+        cv2.imshow('cam_window', np.array(curr_frame))
 
-            if save_images:
-                fdict = dict()
-                fdict['im_array'] = im_array #curr_frame #im_array
-                fdict['frame_count'] = nframes
-                #fdict['frame_id'] = int(curr_frame.frame_id)
-                fdict['sync_in1'] = 0 #meta['s1']
-                fdict['sync_in2'] = 0 #meta['s2']
-                fdict['time_stamp'] = currt #- start_time
-                im_queue.put(fdict)
-                #stop saving frames when syncin2 level goes to 0
-                #if int(meta['s2'])<1:
-                #    break
-            nframes += 1
-            del curr_frame
+        # Break out of the while loop if ESC registered
+        key = cv2.waitKey(1)
+        #sync_state = camera.LineStatus.GetValue()
+        if key == 27: #or sync_state is False: # ESC
+            break
+        #res.Release()
 
-            # Show frame
-            cv2.imshow('cam_window', np.array(im_array))
+        if nframes % report_period == 0:
+            if last_t is not None:
+                print('avg frame rate: %f ' % (report_period / (currt - last_t)))
+                print('--- frame_id:%i, %.3f' % (nframes, currt))
 
-            # Break out of the while loop if ESC registered
-            key = cv2.waitKey(1)
-            #sync_state = camera.LineStatus.GetValue()
-            if key == 27: #or sync_state is False: # ESC
-                break
-            #res.Release()
-
-            if nframes % report_period == 0:
-                if last_t is not None:
-                    print('avg frame rate: %f ' % (report_period / (currt - last_t)))
-                    print('--- frame_id:%i, %.3f' % (nframes, currt))
-
-                last_t=currt
-            #print('done')
-            #curr_frame.enqueue()
-
-except Exception as e:
-    traceback.print_exc()
-    #break
+            last_t=currt
+        #print('done')
+        #curr_frame.enqueue()
 
 print(str.format('total recording time: {} min',(time.time()-start_time)/60))
 
