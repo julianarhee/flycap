@@ -81,7 +81,8 @@ print(outfile)
 
 print(len(os.listdir(frame_dir)))
 
-cmd='ffmpeg -y -r ' + '%.3f' % fps + ' -i ' + frame_dir+'/%d.png -vcodec libx264 -f avi -pix_fmt yuv420p ' + outfile
+#cmd='ffmpeg -y -r ' + '%.3f' % fps + ' -i ' + frame_dir+'/%d.png -vcodec libx264 -f avi -pix_fmt yuv420p ' + outfile
+cmd='ffmpeg -y -r ' + '%.3f' % fps + ' -i ' + frame_dir+'/%d.png -vcodec libx264 -f avi ' + outfile
 
 os.system(cmd)
 d 
