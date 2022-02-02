@@ -287,7 +287,8 @@ if __name__ == '__main__':
                 start_time = time.process_time() #clock() 
                 cam_start_time = metadata['tstamp']
 
-            name = '%i_%i_%i' % (n, metadata['ID'], metadata['tstamp'])
+            #name = '%i_%i_%i' % (n, metadata['ID'], metadata['tstamp'])
+            name = '%i' % n
             if save_as_png:
                 fpath = os.path.join(frame_write_dir, '%s.png' % name)
                 cv2.imwrite(fpath, im_array)
@@ -370,7 +371,7 @@ if __name__ == '__main__':
 
         # Show image:
         cv2.imshow('cam_window', im_array)
-        camera.UserOutputValue.SetValue(False)
+    perf_countercamera.UserOutputValue.SetValue(False)
 
         # Break out of the while loop if ESC registered
         elapsed_time = time.perf_counter() - start_time
@@ -410,7 +411,7 @@ if __name__ == '__main__':
 
     print('Acquisition Finished!')
     #output performance
-    acq_duration=time.time()-start_time
+    acq_duration=time.perf_counter()-start_time
     print('Total Time: %.3f sec' % acq_duration)
     expected_frames=int(np.floor(np.around(acq_duration,2)/frame_period))
     print('Actual Frame Count = '+str(nframes+1))
