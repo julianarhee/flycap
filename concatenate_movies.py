@@ -15,7 +15,7 @@ import shlex
 import shutil
 import sys
 import optparse
-
+import time
 natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split('(\d+)', s)]
 
 def create_movie_input_file(found_movies):
@@ -38,8 +38,8 @@ def get_subvideos(acq_dir):
     sorted list of all subvideos to concatenate into 1 big movie.
     This is due to movies saved as chunks using FlyCapture.
     '''
-    parentdir, expname = os.path.split(acq_dir)
-    found_movies = glob.glob(os.path.join(acq_dir, '%s*.avi' % expname))
+    parentdir, acqname = os.path.split(acq_dir)
+    found_movies = glob.glob(os.path.join(acq_dir, '%s*.avi' % acqname))
 
     # check that all are the same acquisition
     datestrs = list(set([re.search('\d{4}-\d{2}-\d{2}-\d{6}', f).group() 
@@ -48,7 +48,7 @@ def get_subvideos(acq_dir):
     datestr = datestrs[0]
 
     found_movies = sorted(glob.glob(os.path.join(acq_dir, '%s*%s*.avi' \
-        % (expname, datestr))), key=natsort)
+        % (acqname, datestr))), key=natsort)
 
     return found_movies
 
@@ -75,8 +75,8 @@ def concatenate_acqusition(acq_dir, delete_submovies=False):
     create_movie_input_file(found_movies)
 
     # Create output movie path
-    parentdir, expname = os.path.split(acq_dir)
-    outpath = os.path.join(acq_dir, '%s.avi' % expname)
+    parentdir, acqname = os.path.split(acq_dir)
+    outpath = os.path.join(acq_dir, '%s.avi' % acqname)
     
     if os.path.exists(outpath):
         print("Concatenated movie exists!! %s.\nAborting" % outpath)
@@ -112,12 +112,13 @@ def extract_options(options):
                       help="out path directory [default: /mnt/sda/Videos]")
 
     parser.add_option('-E', '--assay', action="store", 
-                      dest="assay", default='singlechoice_20mm_1x_sessions', 
-                      help="Name of dir containing acquisition subdirs, e.g., singlechoice_2omm_1x_sessions")
-   
+                      dest="assay", default='single_20mm_1x1', 
+                      help="Name of dir containing acquisition subdirs, e.g., ")
+
     parser.add_option('-S', '--session', action="store", 
-                       dest='session', default='', 
-                       help='Session contaniing acquisition dirs (YYYYMMDD)')
+                       dest='session', default=None, 
+                       help='session (YYYYMMDD), specify to process >1 acquisition')
+  
     parser.add_option('-A', '--acquisition', action="store", 
                        dest='acquisition', default=None, 
                        help='Name of acquisition, or dir containing .avi files to concatenate (default grabs all dirs found in SESSION dir)')
@@ -145,10 +146,11 @@ if __name__ == '__main__':
     basedir = os.path.join(rootdir, assay)
     
     if acquisition is None: 
-        found_acqs = glob.glob(os.path.join(basedir, session, 
-                                            '%s-*' % session))
+        assert session is not None, "Must provide session or acquisition."
+        found_acqs = sorted(glob.glob(os.path.join(basedir, #session, 
+                                            '%s-*' % session)), key=natsort)
     else:
-        found_acqs = list(set(glob.glob(os.path.join(basedir, session, 
+        found_acqs = list(set(glob.glob(os.path.join(basedir, #session, 
                                             '%s*' % acquisition))))
         found_acqs
         len(found_acqs)
@@ -156,6 +158,13 @@ if __name__ == '__main__':
             "Found %i acquisitions that match:\n %s" % (len(found_acqs), str(acquisition))
             
     # exampe
+    print("Preprocessing %i acquisitions." % len(found_acqs))
     for acq_dir in found_acqs:
+        print("-------------------------------------------")
+        print('%s' % acq_dir)
+        print("-------------------------------------------")
+        t = time.time()
         concatenate_acqusition(acq_dir, delete_submovies=delete_submovies)
+        elapsed = time.time() - t
+        print("Elapsed: %.2f" % elapsed)
 
