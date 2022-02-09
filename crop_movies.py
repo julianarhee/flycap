@@ -18,6 +18,8 @@ import glob
 import optparse
 import time
 from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
+import concatenate_movies as conc
+#from concatenate_movies import concatenate_subvideos
 
 natsort = lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split('(\d+)', s)]
 
@@ -31,7 +33,7 @@ def get_start_and_end_sec(start_time, end_time, time_in_sec=False):
         If str, must be format:  'MM:SS.ms' (estimated with VLC)
         If int, assumes all the way to end (100)
        
-    num_is_sec: (bool)
+    time_in_sec: (bool)
         If INT provided for either start_time or end_time, specifies whether the number is in seconds or minutes
         Set to False if in minutes (e.g., 100 minutes to get full video, a big number). 
     '''
@@ -47,6 +49,54 @@ def get_start_and_end_sec(start_time, end_time, time_in_sec=False):
         tstamps.append(tstamp_sec) 
 
     return tstamps[0], tstamps[1]
+
+def crop_movie(input_movie, start_time, end_time, time_in_sec=False):
+    '''
+    Crop specified movie.
+    
+    Args:
+    -----
+    input_movie: (str)
+        Full path to movie to crop.
+    
+    start_time, end_time: (str or float)
+        If str, must be format:  'MM:SS.ms' (estimated with VLC)
+        If int, assumes all the way to end (100)
+       
+    time_in_sec: (bool)
+        If INT provided for either start_time or end_time, specifies whether the number is in seconds or minutes
+        Set to False if in minutes (e.g., 100 minutes to get full video, a big number). 
+
+    '''
+    orig_input_fpath = input_movie
+    input_movie = '%s.orig' % orig_input_fpath 
+    
+    # Make sure movie not already cropped
+    if os.path.exists(input_movie):
+        print("Movie already cropped, check: %s\n Aborting CROP." % input_movie)
+        return
+        
+    os.rename(orig_input_fpath, input_movie) # Rename original input movie 
+    output_movie = orig_input_fpath # Replace orig input movie name with new movie (for later concatenating)   
+
+    #output_movie = os.path.join(acqdir, '%s_trimmed%s' % (acquisition, movie_ext))
+    print("Input: %s" % input_movie)
+    print("Output: %s" % output_movie)
+
+    # Specify how much time to keep
+    start_time_sec, end_time_sec = get_start_and_end_sec(start_time, end_time, 
+                                                 time_in_sec=time_in_sec)
+    print('Start/end time (sec): %.2f, %.2f' % (start_time_sec, end_time_sec))
+ 
+    # Cropy movie and save
+    t = time.time()
+    ffmpeg_extract_subclip(input_movie, start_time_sec, end_time_sec, 
+                        targetname=output_movie)
+    elapsed = time.time() - t
+    print(elapsed)
+
+    return
+
 
 #%%
 def extract_options(options):
@@ -68,14 +118,11 @@ def extract_options(options):
                        dest='acquisition', default=None, 
                        help='Name of acquisition, or dir containing .avi files to concatenate (default grabs all dirs found in SESSION dir)')
 
-    parser.add_option('--delete', action="store_true", 
-                      dest="delete_submovies", default=False, 
-                      help="Delete sub-videos after concatenating")
     parser.add_option('--submovie', action="store_true", 
                       dest="is_submovie", default=False, 
                       help="Vid to crop is a subvideo")
     parser.add_option('-N', '--num', action="store", 
-                      dest="movie_num", default=-1, 
+                      dest="movie_num", default=-1, type=int, 
                       help="Movie number (suffix, or -1 for FULL")
     parser.add_option('-s', '--start', action="store", 
                       dest="start_time", default=0, 
@@ -87,13 +134,26 @@ def extract_options(options):
                       dest="time_in_sec", default=False, 
                       help="If number provided for start or end time, specifies whether is in MIN or SEC.")
 
+    parser.add_option('--cat', action="store_true", 
+                      dest="concatenate_submovies", default=False, 
+                      help="Create concatenated videos from submovies")
+    parser.add_option('--delete', action="store_true", 
+                      dest="delete_submovies", default=False, 
+                      help="Delete sub-videos after concatenating")
+
     (options, args) = parser.parse_args()
 
     return options
 
 rootdir = '/mnt/sda/Videos'
-assay = 'single_20mm_1x1'
-acquisition = ''
+assay = 'single_20mm_triad_2x1'
+acquisition = '20220203-1101_triad_yak_7do_sh'
+is_submovie=True
+movie_num=0
+start_time0 = '00:05'
+end_time=100
+time_in_sec=False
+delete_submovies=False
 
 #%%
 if __name__ == '__main__':
@@ -110,79 +170,59 @@ if __name__ == '__main__':
     assay = opts.assay
     session = opts.session
     acquisition = opts.acquisition
-    delete_submovies = opts.delete_submovies
-    
-    basedir = os.path.join(rootdir, assay) 
-      
+          
     is_submovie = opts.is_submovie
     movie_num = opts.movie_num
-    start_t = opts.start_time #'00:06.75'
-    end_t = opts.end_time # 100 #'32:38.0'
-
-    start_time = start_t if (isinstance(start_t, str) and ':' in start_t) \
-            else float(start_t) 
-    end_time = end_t if (isinstance(end_t, str) and ':' in end_t) \
-            else float(end_t)   
+    start_time = opts.start_time #'00:06.75'
+    end_time = opts.end_time # 100 #'32:38.0'
     time_in_sec = opts.time_in_sec
-    
+
+    delete_submovies = opts.delete_submovies
+    concatenate_submovies = opts.concatenate_submovies
+     
 #%% 
-    # Select movie
+    # Format start/end time
+    start_time = start_time if (isinstance(start_time, str) and ':' in start_time) \
+            else float(start_time) 
+    end_time = end_time if (isinstance(end_time, str) and ':' in end_time) \
+            else float(end_time)       
+
+#%% 
+    # Get src dirs
+    basedir = os.path.join(rootdir, assay) 
+    acqdir = os.path.join(basedir, acquisition)    
+
+    # Check if video to crop is actually a subvideo 
     if is_submovie:
         subvid_dir = os.path.join(basedir, acquisition, 'subvideos')
         if os.path.exists(subvid_dir):
-            src_dir = subvid_dir
+            acqdir = subvid_dir
         else:
-            src_dir = os.path.join(basedir, acquisition)
-    else:
-        src_dir = os.path.join(basedir, acquisition)
-    
-    print(src_dir)
+            acqdir = os.path.join(basedir, acquisition)
+    print("Processing acq.: %s" % acqdir)
 
 #%%
     if movie_num <0: # get last video
-        input_movie = sorted(glob.glob(os.path.join(src_dir, '%s*.avi' \
+        input_movie = sorted(glob.glob(os.path.join(acqdir, '%s*.avi' \
             % acquisition)), key=natsort)[0]
     else:
-        input_movie = sorted(glob.glob(os.path.join(src_dir, '%s*%04d.avi' \
+        input_movie = sorted(glob.glob(os.path.join(acqdir, '%s*%04d.avi' \
             % (acquisition, movie_num))), key=natsort)[0]
-    print(input_movie)
+    print("Cropping: %s" % input_movie)
 
+    crop_movie(input_movie, start_time, end_time, time_in_sec=time_in_sec)
+    
 #%% 
-    # Set file name
+    # Rename original input movie
     movie_fname = os.path.basename(input_movie)
     movie_name, movie_ext = os.path.splitext(movie_fname)
 
-    if is_submovie:
-        orig_input_fpath = input_movie
-        input_movie = '%s.orig' % orig_input_fpath #output_fpath = os.path.join(src_dir, '%s%s' % (movie_name, movie_ext)) #print(output_fpath) # Rewrite original movie os.rename(movie_fpath, orig_fpath)
-        os.rename(orig_input_fpath, input_movie) # Rename original input movie 
-        output_movie = orig_input_fpath # Replace orig input movie name with new movie (for later concatenating)   
-    else:
-        output_movie = os.path.join(src_dir, '%s_trimmed%s' % (acquisition, movie_ext))
-    print(output_movie)
-
-#%% 
-    # Specify how much time to keep
-    #tstamp = '1:00'
-    #minutes, secs = [int(i) for i in tstamp.split(':')]
-    #clip_dur = minutes*60 + secs
-
-    #start_time='00:06.75'
-    #end_time = 100 #'32:38.0'
-
-    tstart_sec, tend_sec = get_start_and_end_sec(start_time, end_time, 
-                                                 time_in_sec=time_in_sec)
-    print(tstart_sec, tend_sec)
-
-#%% 
-    # Cropy movie and save
-    t = time.time()
-    ffmpeg_extract_subclip(input_movie, tstart_sec, tend_sec, 
-                        targetname=output_movie)
-    elapsed = time.time() - t
-    print(elapsed)
-
 # %%
+    if concatenate_submovies:
+        # Concatenate full movie now
+        print("Concatenating submovies: %s" % acqdir)
+        conc.concatenate_subvideos(acqdir)
+        conc.cleanup_dir(acqdir, delete_submovies=delete_submovies)
 
 # Trim full movie:  152.11sec.
 # Trim subvideo: 34.97sec
