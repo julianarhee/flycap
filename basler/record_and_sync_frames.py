@@ -52,6 +52,8 @@ def extract_options(options):
 
     parser.add_option('-W', '--width', action="store", dest="width", help="image width", type="int", default=960)
     parser.add_option('-H', '--height', action="store", dest="height", help="image height", type="int", default=960)
+    parser.add_option('-x', '--exposure', action="store", dest="exposure", help="exposure (us))", type='float', default=16670)
+
     parser.add_option('-t', '--duration', action="store", dest="duration", help="recording duration (min)", type='float', default=np.inf)
 
     parser.add_option('--port', action="store", dest="port", help="port for arduino (default: /dev/ttyACM0)", default='/dev/ttyACM0')
@@ -69,7 +71,7 @@ def extract_options(options):
 # ############################################
 
 def connect_to_camera(connect_retries=50, frame_rate=20., acquisition_line='Line3', enable_framerate=True,
-                      width=1200, height=1200):
+                      width=1200, height=1200, exposure=16670):
     print('Searching for camera...')
 
     camera = None
@@ -143,7 +145,7 @@ def connect_to_camera(connect_retries=50, frame_rate=20., acquisition_line='Line
     camera.PixelFormat.SetValue('Mono8')
 
     camera.ExposureMode.SetValue('Timed')
-    camera.ExposureTime.SetValue(16670) #(40000)
+    camera.ExposureTime.SetValue(exposure) #(40000)
 
     try:
         actual_framerate = camera.ResultingFrameRate.GetValue()
@@ -182,6 +184,7 @@ if __name__ == '__main__':
     frame_period = float(1/frame_rate)
     width = optsE.width
     height = optsE.height
+    exposure = optsE.exposure
     duration = optsE.duration
     duration_sec = duration*60.0
 
@@ -244,7 +247,8 @@ if __name__ == '__main__':
     camera = None
     if acquire_images:
         camera = connect_to_camera(frame_rate=frame_rate, acquisition_line=acquisition_line, 
-                                   enable_framerate=enable_framerate, width=width, height=height) 
+                                   enable_framerate=enable_framerate, width=width, height=height,
+                            exposure=exposure) 
     # Attach event handlers:
     camera.RegisterImageEventHandler(SampleImageEventHandler(), pylon.RegistrationMode_Append, pylon.Cleanup_Delete)
 
@@ -371,7 +375,7 @@ if __name__ == '__main__':
 
         # Show image:
         cv2.imshow('cam_window', im_array)
-    perf_countercamera.UserOutputValue.SetValue(False)
+        camera.UserOutputValue.SetValue(False)
 
         # Break out of the while loop if ESC registered
         elapsed_time = time.perf_counter() - start_time
