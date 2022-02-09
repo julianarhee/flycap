@@ -2,6 +2,7 @@
 #%%
 from __future__ import (print_function, unicode_literals, division,
                 absolute_import)
+from selectors import EpollSelector
 
 # from pvapi import PvAPI, Camera
 import time
@@ -29,7 +30,6 @@ from pydc1394.camera2 import Context
 
 from PIL import Image
 
-
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 
@@ -46,18 +46,21 @@ def flushBuffer():
 
 #%%
 
-def set_camera_default(cam, mode='10mm_x_1chamber'):
+def set_camera_default(cam, mode='20mm_1x'):
     mode_num = 0
     cam.mode = cam.modes[mode_num] # this is what Nathan uses
+    cam.mode.image_position = (0, 0)
 
-    #Change position to 0,0 (we don't want any offset)
-    image_pos=(0,0) #TODO fix this
-
-    #To change resolution of acquisition
-    image_size = (960, 776) #(1080,1080)
+    if mode=='10mm_1x':
+        #Change position to 0,0 (we don't want any offset)
+        image_pos = (560, 388) # center ROI # (0, 0)
+        #To change resolution of acquisition
+        image_size = (960, 776) #(1080,1080)
+    else:
+        image_pos = (264, 0)
+        image_size = (1552, 1552)
+            
     cam.mode.image_size = image_size
-
-    image_pos = (560, 388) # center ROI # (0, 0)
     cam.mode.image_position = image_pos
 
     return cam 
@@ -133,7 +136,7 @@ class CameraPlot:
 def run(options):
 #%%
     parser = optparse.OptionParser()
-    parser.add_option('--output-path', action="store", dest="base_dir", default="/tmp/frames", help="out path directory [default: /tmp/frames]")
+    parser.add_option('--output-path', action="store", dest="base_dir", default="/home/julianarhee/Videos", help="out path directory [default: /tmp/frames]")
     parser.add_option('--port', action='store', dest='port', default='/dev/ttyACMO',
         help='serial port')
 
@@ -158,7 +161,8 @@ def run(options):
     base_dir = options.base_dir
     output_format = options.output_format
     experiment_name = options.experiment_name
-
+    assay_desc = '20mm_1x' # TODO make this an arg
+    
     save_in_separate_process = options.save_in_separate_process
     recording_duration = float(options.recording_duration)
     send_trigger = options.send_trigger
@@ -178,7 +182,7 @@ def run(options):
     time.sleep(2)
 
 #%% tmp vars
-    interactive=True
+    interactive=False
     # base_dir = '/Users/julianarhee/Documents/ruta_lab/projects/free_behavior/acquisition'
     if interactive:
         experiment_name = 'test'
@@ -282,12 +286,19 @@ def run(options):
         cam.brightness.mode = 'auto' 
         cam.exposure.mode = 'manual' #'auto' # 2.414 @ 40Hz 
         cam.white_balance.mode = 'auto'
+        
     except AttributeError: # thrown if the camera misses one of the features
         pass
 
 #%%
     # Choose Format_7 mode
     # See:  ./pydc1394/dc1394.py -- video_mode_vals
+
+    # manual, via FlyCap2
+    # mode=0
+    # 1552, 1552
+    # roi pos: (264, 0)
+    # pixel format = Mono8
 
     # mode_dict = object_fields_dict(cam.modes[mode_num])
     # mode_dict
@@ -318,7 +329,7 @@ def run(options):
 
     #%
 
-    cam = set_camera_default(cam, mode='10mm_x_1chamber')
+    cam = set_camera_default(cam, mode=assay_desc)
     #for feat in cam.features:
     #    print("%s (cam): %s" % (feat,cam.__getattribute__(feat).value))
 

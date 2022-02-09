@@ -38,12 +38,13 @@ void loop() {
     while (Serial.available()>0){  
       serialByte=Serial.read();
       if (serialByte=='S'){
-        while(1){
+        write_flag=1;
+        while(write_flag==1){
           //start recording pixel clock status
           start_time = micros();
           //PORTD = B00110000;//set pin 5 to high 
           digitalWrite(trigger_pin, HIGH); 
-          write_flag = 1; //start streaming data from first time you get acquisition trigger
+          //write_flag = 1; //start streaming data from first time you get acquisition trigger
         
           // check for finish trigger
           if (Serial.available()>0){ //Experiment finished - stop recording pixel clock
@@ -52,7 +53,7 @@ void loop() {
           //PORTD = B00000000;//set pin 5 to low
           digitalWrite(trigger_pin, LOW);
           write_flag = 0;
-          break;
+          //break;
           }
         }
       }
