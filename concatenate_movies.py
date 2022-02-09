@@ -28,9 +28,7 @@ def create_movie_input_file(found_movies):
     with open(outfile, 'a') as fp:
         for fn in fnames:
             fp.write('file \'%s\'\n' % fn)
-
     return
-
 
 def get_subvideos(acq_dir):
     '''
@@ -40,10 +38,12 @@ def get_subvideos(acq_dir):
     '''
     parentdir, acqname = os.path.split(acq_dir)
     found_movies = glob.glob(os.path.join(acq_dir, '%s*.avi' % acqname))
-
+    found_movies
     # check that all are the same acquisition
-    datestrs = list(set([re.search('\d{4}-\d{2}-\d{2}-\d{6}', f).group() 
+    all_datestrs = list(set([re.search('\d{4}-\d{2}-\d{2}-\d{6}', f).group() \
+            if re.search('\d{4}-\d{2}-\d{2}-\d{6}', f) is not None else None \
             for f in found_movies]))
+    datestrs = [f for f in all_datestrs if f is not None]
     assert len(datestrs)==1, "Too many datestr found: %s" % str(datestrs)
     datestr = datestrs[0]
 
@@ -53,7 +53,39 @@ def get_subvideos(acq_dir):
     return found_movies
 
 
-def concatenate_acqusition(acq_dir, delete_submovies=False):
+def cleanup_dir(acq_dir, delete_submovies=False):
+    '''
+    Move (or delete) subvideos after making full concatenated video.
+    Also checks for .orig avis to move.
+    '''
+    # Find sub videos
+    found_movies = get_subvideos(acq_dir)
+    
+    # Move subvideos
+    submov_dir = os.path.join(acq_dir, 'subvideos')
+    if not os.path.exists(submov_dir):
+        os.makedirs(submov_dir)
+    for submov_path in found_movies:
+        old_dir, submov_name = os.path.split(submov_path)
+        shutil.move(submov_path, os.path.join(submov_dir, submov_name))
+
+    # Check if there are .orig files to move
+    orig_files = glob.glob(os.path.join(acq_dir, '*.orig'))
+    for orig_path in orig_files:
+        old_dir, submov_name = os.path.split(orig_path)
+        shutil.move(orig_path, os.path.join(submov_dir, submov_name))
+        
+    # Delete dir if desired
+    if delete_submovies:
+        confirm = input("Are you sure you want to delete submovies? Enter Y/n: ")
+        if confirm=='Y':
+            confirm_again = input("Type 'yes' to confirm: ")
+            if confirm=='yes':
+                shutil.rmtree(submov_dir)
+            
+    return 
+
+def concatenate_subvideos(acq_dir, delete_submovies=False):
     '''
     For a given acquisition (set of .avi files)
     1. Check that all submovies are of the same capture. 
@@ -78,27 +110,17 @@ def concatenate_acqusition(acq_dir, delete_submovies=False):
     parentdir, acqname = os.path.split(acq_dir)
     outpath = os.path.join(acq_dir, '%s.avi' % acqname)
     
+    # Check that we didn't already make the movie    
     if os.path.exists(outpath):
         print("Concatenated movie exists!! %s.\nAborting" % outpath)
         return
-     
-    print('Creating full movie: %s' % outpath)
-
-#%%
+ 
     # Concatenate movies in list
+    print('Creating full movie: %s' % outpath)
     list_fpath = os.path.join(acq_dir, 'movlist.txt')
     cmd = 'ffmpeg -f concat -i %s -c copy %s' % (list_fpath, outpath)
     subprocess.call(shlex.split(cmd))
-    #subprocess.call(shlex.split(f"./concatenate_movies.sh {movname}"))
 
-#%% 
-    # Move subvideos
-    submov_dir = os.path.join(acq_dir, 'subvideos')
-    if not os.path.exists(submov_dir):
-        os.makedirs(submov_dir)
-    for submov_path in found_movies:
-        old_dir, submov_name = os.path.split(submov_path)
-        shutil.move(submov_path, os.path.join(submov_dir, submov_name))
 
     return outpath
 
@@ -129,6 +151,10 @@ def extract_options(options):
 
     return options
 
+rootdir = '/mnt/sda/Videos'
+assay = 'single_20mm_triad_2x1'
+acquisition = '20220202-1152_triad_mauW_7do_sh'
+
 if __name__ == '__main__':
 
     opts = extract_options(sys.argv[1:])
@@ -152,19 +178,19 @@ if __name__ == '__main__':
     else:
         found_acqs = list(set(glob.glob(os.path.join(basedir, #session, 
                                             '%s*' % acquisition))))
-        found_acqs
-        len(found_acqs)
         assert len(found_acqs)==1, \
             "Found %i acquisitions that match:\n %s" % (len(found_acqs), str(acquisition))
-            
+         
     # exampe
     print("Preprocessing %i acquisitions." % len(found_acqs))
+    acq_dir = found_acqs[0]
     for acq_dir in found_acqs:
         print("-------------------------------------------")
         print('%s' % acq_dir)
         print("-------------------------------------------")
         t = time.time()
-        concatenate_acqusition(acq_dir, delete_submovies=delete_submovies)
+        concatenate_subvideos(acq_dir)
         elapsed = time.time() - t
         print("Elapsed: %.2f" % elapsed)
-
+        # Clean up
+        cleanup_dir(acq_dir, delete_submovies=delete_submovies)
