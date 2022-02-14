@@ -5,6 +5,17 @@
 @Time    :   2022/02/12 18:28:49
 @Author  :   julianarhee 
 @Contact :   juliana.rhee@gmail.com
+
+Loads a .json file for a given assay and day (YYYYMMDD_preprocessing.json)
+and processes cropping and concatenation as specified in the file.
+
+Params file created with: crop_params.py
+Calls crop_movies.py and concatenate_movies.py. 
+
+Assumes mp4 are H.263 and *not* subvideos, while .avi are mjpeg compression + shorter subvideos.
+
+python preprocess_movies.py --session 20220211 -v 
+ 
 '''
 
 import os
@@ -69,6 +80,7 @@ if __name__ == '__main__':
     # get param files    
     found_param_files = get_param_filepaths(session=session, rootdir=rootdir) 
     for param_fpath in found_param_files:
+        exit_status=0
         with open(param_fpath, 'r') as f:
             params = json.load(f)
             
@@ -77,27 +89,34 @@ if __name__ == '__main__':
             print("processing: %s" % acqdir)
             print("----------------------------------------------------------")
             pp.pprint(paramdict)
+ 
+            # Check format
+            is_avi = len(glob.glob(os.path.join(acqdir, '*.avi'))) > 0
+            if not is_avi:
+                assert len(glob.glob(os.path.join(acqdir, '*.mp4')))>0, "No .mp4s found either..."
+                
+            fmt = 'avi' if is_avi else 'mp4' 
+            if fmt == 'mp4': # This is h.264 file where whole acq. in 1 file
+                movie_num = -1
+                concatenate_movies=False
+                delete_submovies=False  
+        
+            # Check if already processed
+            renamed_orig_mp4 = glob.glob(os.path.join(acqdir, '*.orig'))
+            rename_subvids = glob.glob(os.path.join(acqdir, 'subvideos', '*.orig'))
+            if len(renamed_orig_mp4)>0 or len(rename_subvids)>0:
+                print('---> acquisition already processed. skipping.')
+                continue
             
             try:
                 start_time, end_time = paramdict['times'] 
+                movie_num = paramdict['movie_num']
+                concatenate_submovies = paramdict['submovie'] in ['true', 'True', True]
+
                 if start_time is not None:
                     crop_movie=True
                     print("Specified START-TIME. Cropping from: %s" % str(start_time))
-            
-                # Check format
-                is_avi = len(glob.glob(os.path.join(acqdir, '*.avi'))) > 0
-                if not is_avi:
-                    assert len(glob.glob(os.path.join(acqdir, '*.mp4')))>0, "No .mp4s found either..."
-                    
-                fmt = 'avi' if is_avi else 'mp4' 
-                if fmt == 'mp4': # This is h.264 file where whole acq. in 1 file
-                    movie_num = -1
-                    concatenate_movies=False
-                    delete_submovies=False  
-                else:
-                    movie_num = paramdict['movie_num']
-                    concatenate_submovies = paramdict['submovie'] in ['true', 'True', True]
-                    
+             
                 if crop_movie:
                     do_crop(acqdir, start_time, end_time, movie_num=movie_num, 
                             time_in_sec=time_in_sec, fmt=fmt, verbose=verbose)
@@ -106,17 +125,17 @@ if __name__ == '__main__':
                     # Concatenate full movie now
                     print("Concatenating submovies: %s" % acqdir)
                     concatenate_subvideos(acqdir)
-
-                # clean up
-                cleanup_dir(acqdir, delete_submovies=delete_submovies) 
-                
-                # move preprocessing params as finished
-                done_fpath = '%s.done' % param_fpath
-                os.rename(param_fpath, done_fpath)
+                    # clean up
+                    cleanup_dir(acqdir, delete_submovies=delete_submovies)                 
                 
             except Exception as e:
                 print("Error processing: %s" % acqdir)
-                print("params: %s" % str(params))
+                print("params: %s" % str(paramdict))
+                exit_status=1
                 traceback.print_exc()
             
-        
+        # move preprocessing params as finished
+        if exit_status==0:
+            done_fpath = '%s.done' % param_fpath
+            os.rename(param_fpath, done_fpath)
+       

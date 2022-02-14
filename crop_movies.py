@@ -8,6 +8,8 @@
 
 Crop movies
 
+python crop_movies.py -E single_20mm_1x1 --fmt avi -s '00:05.7' -e 100 --crop -A 20220203-0951_sant_3do_sh --submovie -N 0 --cat
+ 
 '''
 
 #%%
