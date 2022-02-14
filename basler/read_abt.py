@@ -55,7 +55,9 @@ performance_info = os.path.join(vid_dir, 'performance.txt')
 metadata = pd.read_csv(performance_info, sep="\t")
 metadata
 fps = float(metadata['frame_rate'])
-      
+     
+     
+os.listdir(frame_dir) 
 #%%
 rename_files=False
 if rename_files:
@@ -64,16 +66,17 @@ if rename_files:
 
     f = fns[0]
     for f in fns:
-
         fdir, fname = os.path.split(f)
-        fnum = fname.split('_')[0]
-        
-        fname_new = os.path.join(frame_dir, '%s.png' % fnum)
+        fnum_ext = fname.split('_')[0]
+        fnum = int(os.path.splitext(fnum_ext)[0])
+        fname_new = os.path.join(frame_dir, '%06d.png' % fnum)
         assert not os.path.exists(fname_new), "Path exists: %s" % fname_new
         os.rename(f, fname_new)
         
-    
-         
+
+fns = sorted(glob.glob(os.path.join(frame_dir, '*.png')), key=natsort) 
+print("Found %i files" % len(fns))
+fns[0:20]    
       
 #%% save movie 
 outfile = os.path.join(vid_dir, '%s.avi' % cap)
@@ -85,4 +88,11 @@ print(len(os.listdir(frame_dir)))
 cmd='ffmpeg -y -r ' + '%.3f' % fps + ' -i ' + frame_dir+'/%d.png -vcodec libx264 -f avi ' + outfile
 
 os.system(cmd)
-d 
+
+cmd='ffmpeg -y -r ' + '%.3f' % fps + ' -i ' + frame_dir+'/%d.png -vcodec libx264 -f avi ' + outfile
+
+
+cmd='ffmpeg -y -r ' + '%.2f' % fps + ' -i ' + frame_dir+'/%06d.png -c:v qtrle -pix_fmt rgb24 ' + outfile
+cmd
+os.system(cmd)
+
