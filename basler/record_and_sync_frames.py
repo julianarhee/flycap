@@ -27,6 +27,7 @@ import cv2 #from scipy.misc import imsave
 import threading
 import time
 from datetime import datetime
+from libtiff import TIFF
 
 from queue import Queue
 import numpy as np
@@ -194,7 +195,7 @@ if __name__ == '__main__':
     save_dir = optsE.save_dir
     output_format = optsE.output_format
     save_in_separate_process = optsE.save_in_separate_process   
-    save_as_png = optsE.output_format=='png'
+    save_as_png = True #output_format=='tiff'
     basename = optsE.basename
     
     # Make the output path if it doesn't already exist
@@ -281,7 +282,7 @@ if __name__ == '__main__':
         frametimes_fpath = os.path.join(dst_dir, 'frame_times.txt')
         print("Created outfile: %s" % frametimes_fpath) #serial_outfile)
         serial_file = open(frametimes_fpath, 'w+') #open(serial_outfile, 'w+')
-        serial_file.write('frame\tframe_ID\tframe_tstamp\tacq_trigger\tframe_trigger\trelative_time\trelative_camera_time\n')
+        serial_file.write('count\tframe\tframe_ID\tframe_tstamp\timage_num\tacq_trigger\tframe_trigger\trelative_time\trelative_camera_time\n')
 
         n = 0
         result = im_queue.get()
@@ -292,15 +293,18 @@ if __name__ == '__main__':
                 cam_start_time = metadata['tstamp']
 
             #name = '%i_%i_%i' % (n, metadata['ID'], metadata['tstamp'])
-            name = '%i' % n
+            name = 'frame-%06d' % n
             if save_as_png:
                 fpath = os.path.join(frame_write_dir, '%s.png' % name)
+                #tiff = TIFF.open(fpath, mode='w')
+                #tiff.write_image(im_array)
+                #tiff.close()
                 cv2.imwrite(fpath, im_array)
             else:
                 fpath = os.path.join(frame_write_dir, '%s.npz' % name)
                 np.savez_compressed(fpath, im_array)
 
-            serial_file.write('\t'.join([str(s) for s in [n, metadata['ID'], metadata['tstamp'], metadata['acq_trigger'], metadata['frame_trigger'], str(time.process_time()-start_time), (metadata['tstamp']-cam_start_time)/1E9]]) + '\n')
+            serial_file.write('\t'.join([str(s) for s in [metadata['frame_count'], n, metadata['ID'], metadata['tstamp'], metadata['number'], metadata['acq_trigger'], metadata['frame_trigger'], str(time.process_time()-start_time), (metadata['tstamp']-cam_start_time)/1E9]]) + '\n')
             n += 1
             result = im_queue.get()
 
@@ -367,6 +371,7 @@ if __name__ == '__main__':
             meta = {'tstamp': res.TimeStamp, 
                     'ID': res.ID,
                     'number': res.ImageNumber,
+                    'frame_count': nframes,
                     'acq_trigger': sync_state,
                     'frame_trigger': frame_state}
             if save_images:
