@@ -42,14 +42,32 @@ def set_crop_params(session, assay_prefix='single_20mm', rootdir='/mnt/sda/Video
     print('------------------------------------------------------')
     print("Found %i assays." % (len(found_assays)))
     for curr_assay in found_assays:
-        procdict={}
+        # Check for existing params
+        fname = '%s_preprocessing.json' % session
+        proc_input_file = os.path.join(rootdir, curr_assay, fname)
+        if os.path.exists(proc_input_file):
+            with open(proc_input_file, 'r') as f:
+                procdict = json.load(f)
+        else:
+            procdict={}
+
         print('------------------------------------------------------')
         curr_acqs = [fdir for fdir in 
                      sorted(glob.glob(os.path.join(rootdir, curr_assay, '%s-*' % session)), key=natsort)
                      if os.path.isdir(fdir)]
         print("[%s] - Found %i acquisitions" % (curr_assay, len(curr_acqs)))
+
+        # Check which acqs already have params
+        existing_params = [k for k in curr_acqs if k in procdict.keys()] 
+        
         for acq in curr_acqs:
-            preprocess = input("    %s | Enter Y/n to peprocess: " % acq)
+            if acq in existing_params:
+                print("[%s] Found existing params" % acq)
+                print(procdict[acq])
+                preprocess = input("Overwrite? Y/n:")
+            else: 
+                preprocess = input("    %s | Enter Y/n to peprocess: " % acq)
+
             confirmed=False 
             if preprocess == 'Y':
                 submovie = input('Is this a submovie? (ends .avi if FlyCap), Enter Y/n: ')
@@ -71,8 +89,6 @@ def set_crop_params(session, assay_prefix='single_20mm', rootdir='/mnt/sda/Video
                                     'submovie': is_submovie,
                                     'movie_num': movie_num}})
 
-        fname = '%s_preprocessing.json' % session
-        proc_input_file = os.path.join(rootdir, curr_assay, fname)
         if len(procdict.keys())>0:
             with open(proc_input_file, 'w') as f:
                 json.dump(procdict, f, sort_keys=True)

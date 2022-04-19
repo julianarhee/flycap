@@ -428,7 +428,7 @@ if __name__ == '__main__':
 
     # write performance to file
     performance_file = open(performance_fpath,'w+')
-    performance_file.write('frame_rate\tframe_period\tacq_duration\tframe_count\texpected_frame_count\tmissingFrames\n')
+    performance_file.write('frame_rate\tframe_period\tacq_duration\tframe_count\texpected_frame_count\tmissing_frames\n')
     performance_file.write('%10.4f\t%10.4f\t%10.4f\t%i\t%i\t%i\n'%\
         (frame_rate, frame_period, acq_duration, nframes, expected_frames, expected_frames-nframes))
     performance_file.close()
